@@ -66,9 +66,8 @@ async function handleStop(interaction) {
   // 立即停止擷取並離開頻道；辨識在錄音期間已即時排隊進行
   const session = sessions.stop(interaction.guildId);
 
-  const total = session.pending.length;
   const progressText = () =>
-    `⏹️ 錄音結束（共 ${total} 段），辨識完成 ${session.doneCount}/${total}，整理中...`;
+    `⏹️ 錄音結束，辨識完成 ${session.doneCount}/${session.sttJobs.length} 批，整理中...`;
   await interaction.editReply(progressText());
   const ticker = setInterval(() => {
     interaction.editReply(progressText()).catch(() => {});

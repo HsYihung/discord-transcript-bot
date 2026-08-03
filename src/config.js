@@ -25,7 +25,11 @@ export const config = {
   // STT 請求最小間隔（毫秒），避開免費層 RPM 限制（Groq 免費層 20 RPM ≈ 3000ms）
   sttMinIntervalMs: Number(process.env.STT_MIN_INTERVAL_MS || 3200),
   // 使用者停止說話後多久視為一個段落結束（毫秒）
-  silenceDurationMs: Number(process.env.SILENCE_DURATION_MS || 800),
+  silenceDurationMs: Number(process.env.SILENCE_DURATION_MS || 1500),
+  // 同一發言者兩段發言間隔在此範圍內就合併成一個 batch 送辨識（毫秒）
+  mergeGapMs: Number(process.env.MERGE_GAP_MS || 8000),
+  // 單一 batch 音訊長度上限（毫秒），達到就先送出（Groq 單檔上限 300 秒）
+  maxMergedDurationMs: Number(process.env.MAX_MERGED_DURATION_MS || 120_000),
   // 短於此長度的音訊段落直接丟棄（毫秒），過濾雜音
   minSegmentMs: Number(process.env.MIN_SEGMENT_MS || 300),
 
