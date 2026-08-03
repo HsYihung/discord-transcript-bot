@@ -63,7 +63,22 @@ async function handleStart(interaction) {
 
 async function handleStop(interaction) {
   await interaction.deferReply();
-  const session = await sessions.stop(interaction.guildId);
+  // 立即停止擷取並離開頻道；辨識在錄音期間已即時排隊進行
+  const session = sessions.stop(interaction.guildId);
+
+  const total = session.pending.length;
+  const progressText = () =>
+    `⏹️ 錄音結束（共 ${total} 段），辨識完成 ${session.doneCount}/${total}，整理中...`;
+  await interaction.editReply(progressText());
+  const ticker = setInterval(() => {
+    interaction.editReply(progressText()).catch(() => {});
+  }, 5000);
+
+  try {
+    await session.finalize();
+  } finally {
+    clearInterval(ticker);
+  }
   const transcript = formatTranscript(session, sttProvider.name);
 
   // 存檔
@@ -77,10 +92,16 @@ async function handleStop(interaction) {
   const attachment = new AttachmentBuilder(Buffer.from(transcript, 'utf8'), {
     name: filename,
   });
-  await interaction.editReply({
+  const payload = {
     content: `⏹️ 錄音結束，共 ${session.segments.length} 段發言，逐字稿如下：`,
     files: [attachment],
-  });
+  };
+  // 辨識若拖超過 15 分鐘，interaction token 會失效，改用頻道訊息送出
+  try {
+    await interaction.editReply(payload);
+  } catch {
+    await interaction.channel.send(payload);
+  }
 }
 
 async function handleStatus(interaction) {

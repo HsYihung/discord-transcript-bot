@@ -1,5 +1,5 @@
 import { EndBehaviorType } from '@discordjs/voice';
-import prism from 'prism-media';
+import OpusScript from 'opusscript';
 import { config } from '../config.js';
 import { pcmToWav, pcmDurationMs } from '../utils/wav.js';
 
@@ -31,6 +31,8 @@ export class RecordingSession {
     this.segments = [];
     /** @type {Promise<void>[]} 進行中的辨識 */
     this.pending = [];
+    /** 已完成（成功或失敗）的辨識數 */
+    this.doneCount = 0;
     /** 正在錄音中的使用者，避免重複訂閱 */
     this.activeUsers = new Set();
     this.stopped = false;
@@ -56,24 +58,30 @@ export class RecordingSession {
     const opusStream = this.receiver.subscribe(userId, {
       end: { behavior: EndBehaviorType.AfterSilence, duration: config.silenceDurationMs },
     });
-    const decoder = new prism.opus.Decoder({ rate: 48000, channels: 2, frameSize: 960 });
 
+    // 逐封包解碼：壞封包只丟一個音框（20ms），不會毀掉整個段落。
+    // ≤3 bytes 是 Discord 的靜音/控制封包，直接跳過。
+    const decoder = new OpusScript(48000, 2, OpusScript.Application.AUDIO);
     const chunks = [];
-    decoder.on('data', (chunk) => chunks.push(chunk));
+    let badPackets = 0;
     opusStream.on('error', (err) => console.error(`[recorder] opus stream error (${userId}):`, err.message));
-    decoder.on('error', (err) => console.error(`[recorder] decoder error (${userId}):`, err.message));
-    // 不用 pipe：Discord 會夾雜 ≤3 bytes 的靜音/控制封包，直接餵給解碼器會炸掉整個段落
     opusStream.on('data', (packet) => {
-      if (packet.length > 3 && !decoder.destroyed) decoder.write(packet);
-    });
-    opusStream.once('end', () => {
-      if (!decoder.destroyed) decoder.end();
+      if (packet.length <= 3) return;
+      try {
+        chunks.push(Buffer.from(decoder.decode(packet)));
+      } catch {
+        badPackets++;
+      }
     });
 
     const job = new Promise((resolve) => {
-      decoder.once('end', () => resolve());
-      decoder.once('close', () => resolve());
+      opusStream.once('end', () => resolve());
+      opusStream.once('close', () => resolve());
     }).then(async () => {
+      decoder.delete();
+      if (badPackets > 0) {
+        console.warn(`[recorder] 使用者 ${userId} 的段落跳過 ${badPackets} 個無效封包`);
+      }
       this.activeUsers.delete(userId);
 
       const pcm = Buffer.concat(chunks);
@@ -98,7 +106,9 @@ export class RecordingSession {
         segment.text = text;
       } catch (err) {
         segment.error = err.message;
-        console.error(`[stt] 辨識失敗 (${segment.displayName}):`, err);
+        console.error(`[stt] 辨識失敗 (${segment.displayName}):`, err.message);
+      } finally {
+        this.doneCount++;
       }
     });
 
@@ -116,13 +126,21 @@ export class RecordingSession {
     }
   }
 
-  /** 停止錄音，等所有辨識完成後回傳排序好的 segments */
-  async stop() {
+  /** 尚未完成辨識的段落數 */
+  get pendingCount() {
+    return this.pending.length - this.doneCount;
+  }
+
+  /** 立即停止擷取並離開語音頻道（不等待辨識） */
+  stopCapture() {
     this.stopped = true;
     this.endedAt = new Date();
     this.receiver.speaking.off('start', this._onSpeakingStart);
     this.connection.destroy();
+  }
 
+  /** 等錄音期間排入的辨識全部完成，回傳排序好的 segments */
+  async finalize() {
     await Promise.allSettled(this.pending);
     this.segments.sort((a, b) => a.startMs - b.startMs);
     return this.segments;

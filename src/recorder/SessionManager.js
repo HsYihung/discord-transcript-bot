@@ -44,12 +44,12 @@ export class SessionManager {
     return session;
   }
 
-  /** 停止錄音並回傳 session（含辨識完成的 segments） */
-  async stop(guildId) {
+  /** 停止擷取並回傳 session；剩餘辨識由呼叫端 await session.finalize() 等待 */
+  stop(guildId) {
     const session = this.sessions.get(guildId);
     if (!session) throw new Error('目前沒有進行中的錄音');
     this.sessions.delete(guildId);
-    await session.stop();
+    session.stopCapture();
     return session;
   }
 }

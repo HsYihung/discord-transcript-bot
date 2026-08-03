@@ -36,11 +36,23 @@ export class OpenAIWhisperProvider extends SttProvider {
       if (language) form.append('language', language);
       if (prompt) form.append('prompt', prompt);
 
-      const res = await fetch(`${this.baseUrl}/audio/transcriptions`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${this.apiKey}` },
-        body: form,
-      });
+      let res;
+      try {
+        res = await fetch(`${this.baseUrl}/audio/transcriptions`, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.apiKey}` },
+          body: form,
+          signal: AbortSignal.timeout(45_000),
+        });
+      } catch (err) {
+        // 逾時或網路錯誤：重試，絕不讓單一請求卡死整條辨識佇列
+        if (attempt < MAX_RETRIES) {
+          console.warn(`[stt] 請求失敗（${err.name}），重試第 ${attempt + 1} 次`);
+          await sleep(2000);
+          continue;
+        }
+        throw new Error(`STT 請求失敗: ${err.message}`);
+      }
 
       if (res.ok) {
         const data = await res.json();
