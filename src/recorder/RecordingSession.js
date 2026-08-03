@@ -60,9 +60,15 @@ export class RecordingSession {
 
     const chunks = [];
     decoder.on('data', (chunk) => chunks.push(chunk));
-    opusStream.on('error', (err) => console.error(`[recorder] opus stream error (${userId}):`, err));
-    decoder.on('error', (err) => console.error(`[recorder] decoder error (${userId}):`, err));
-    opusStream.pipe(decoder);
+    opusStream.on('error', (err) => console.error(`[recorder] opus stream error (${userId}):`, err.message));
+    decoder.on('error', (err) => console.error(`[recorder] decoder error (${userId}):`, err.message));
+    // 不用 pipe：Discord 會夾雜 ≤3 bytes 的靜音/控制封包，直接餵給解碼器會炸掉整個段落
+    opusStream.on('data', (packet) => {
+      if (packet.length > 3 && !decoder.destroyed) decoder.write(packet);
+    });
+    opusStream.once('end', () => {
+      if (!decoder.destroyed) decoder.end();
+    });
 
     const job = new Promise((resolve) => {
       decoder.once('end', () => resolve());

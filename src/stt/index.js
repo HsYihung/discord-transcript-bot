@@ -8,7 +8,8 @@ import { DummyProvider } from './DummyProvider.js';
  * 新增 provider 時在這裡加一行：'名稱': () => new 你的Provider(...)
  */
 const registry = {
-  'openai-whisper': () => new OpenAIWhisperProvider(config.stt.openai),
+  'openai-whisper': () =>
+    new OpenAIWhisperProvider({ ...config.stt.openai, minIntervalMs: config.sttMinIntervalMs }),
   typeless: () => new TypelessProvider(config.stt.typeless),
   dummy: () => new DummyProvider(),
 };

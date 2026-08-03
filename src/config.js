@@ -22,6 +22,8 @@ export const config = {
     },
   },
 
+  // STT 請求最小間隔（毫秒），避開免費層 RPM 限制（Groq 免費層 20 RPM ≈ 3000ms）
+  sttMinIntervalMs: Number(process.env.STT_MIN_INTERVAL_MS || 3200),
   // 使用者停止說話後多久視為一個段落結束（毫秒）
   silenceDurationMs: Number(process.env.SILENCE_DURATION_MS || 800),
   // 短於此長度的音訊段落直接丟棄（毫秒），過濾雜音
