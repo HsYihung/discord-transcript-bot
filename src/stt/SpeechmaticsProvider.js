@@ -1,5 +1,14 @@
+import * as OpenCC from 'opencc-js';
 import { SttProvider } from './SttProvider.js';
 import { createRateLimiter, sleep } from '../utils/throttle.js';
+
+// 簡體 → 台灣繁體（含慣用語），cmn_en 雙語 pack 只輸出簡體時用
+const toTraditional = OpenCC.Converter({ from: 'cn', to: 'twp' });
+
+/** 移除 CJK 字元之間的空白（Speechmatics 會逐詞插空格） */
+function tidyCjkSpacing(text) {
+  return text.replace(/(?<=[一-鿿　-〿，。、！？])\s+(?=[一-鿿，。、！？])/g, '');
+}
 
 /**
  * Speechmatics Batch API
@@ -42,7 +51,10 @@ export class SpeechmaticsProvider extends SttProvider {
       transcription_config: {
         language: this.language,
         operating_point: this.operatingPoint,
-        ...(this.outputLocale ? { output_locale: this.outputLocale } : {}),
+        // cmn_en 雙語 pack 不支援 output_locale（會 400），只有純 cmn 支援
+        ...(this.outputLocale && this.language !== 'cmn_en'
+          ? { output_locale: this.outputLocale }
+          : {}),
       },
     };
     const form = new FormData();
@@ -89,7 +101,11 @@ export class SpeechmaticsProvider extends SttProvider {
       const body = await txtRes.text().catch(() => '');
       throw new Error(`Speechmatics 取稿失敗 ${txtRes.status}: ${body.slice(0, 300)}`);
     }
-    const text = (await txtRes.text()).trim();
+    let text = (await txtRes.text()).trim();
+    // cmn_en 輸出簡體，統一轉台灣繁體並整理詞間空白
+    if (this.language.startsWith('cmn')) {
+      text = tidyCjkSpacing(toTraditional(text));
+    }
     return { text };
   }
 }
