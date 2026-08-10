@@ -1,6 +1,7 @@
 import { config } from '../config.js';
 import { OpenAIWhisperProvider } from './OpenAIWhisperProvider.js';
 import { TypelessProvider } from './TypelessProvider.js';
+import { SpeechmaticsProvider } from './SpeechmaticsProvider.js';
 import { DummyProvider } from './DummyProvider.js';
 
 /**
@@ -11,6 +12,7 @@ const registry = {
   'openai-whisper': () =>
     new OpenAIWhisperProvider({ ...config.stt.openai, minIntervalMs: config.sttMinIntervalMs }),
   typeless: () => new TypelessProvider(config.stt.typeless),
+  speechmatics: () => new SpeechmaticsProvider(config.stt.speechmatics),
   dummy: () => new DummyProvider(),
 };
 

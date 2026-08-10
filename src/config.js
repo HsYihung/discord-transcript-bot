@@ -20,6 +20,16 @@ export const config = {
       baseUrl: process.env.TYPELESS_BASE_URL || 'https://api.typelessapi.com',
       model: process.env.TYPELESS_MODEL || 'typeless-1.0-pro',
     },
+    speechmatics: {
+      apiKey: process.env.SPEECHMATICS_API_KEY,
+      region: process.env.SPEECHMATICS_REGION || 'eu1',
+      // cmn_en = 中英雙語 pack（原生 code-switching）
+      language: process.env.SPEECHMATICS_LANGUAGE || 'cmn_en',
+      // 繁體中文輸出
+      outputLocale: process.env.SPEECHMATICS_OUTPUT_LOCALE || 'cmn-Hant',
+      // standard（快）或 enhanced（準）
+      operatingPoint: process.env.SPEECHMATICS_OPERATING_POINT || 'enhanced',
+    },
   },
 
   // STT 請求最小間隔（毫秒），避開免費層 RPM 限制（Groq 免費層 20 RPM ≈ 3000ms）
