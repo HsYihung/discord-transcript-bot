@@ -40,12 +40,14 @@ export class SpeechmaticsProvider extends SttProvider {
     return { Authorization: `Bearer ${this.apiKey}` };
   }
 
-  transcribe(wavBuffer, options = {}) {
-    return this.schedule(() => this.#run(wavBuffer, options));
+  async transcribe(wavBuffer) {
+    // 只有「送件」需要排隊限速；輪詢和取稿平行進行，
+    // 多批總耗時 ≈ 最慢一批，而不是全部相加
+    const id = await this.schedule(() => this.#createJob(wavBuffer));
+    return this.#awaitResult(id);
   }
 
-  async #run(wavBuffer) {
-    // 1. 提交任務
+  async #createJob(wavBuffer) {
     const config = {
       type: 'transcription',
       transcription_config: {
@@ -61,19 +63,30 @@ export class SpeechmaticsProvider extends SttProvider {
     form.append('data_file', new Blob([wavBuffer], { type: 'audio/wav' }), 'segment.wav');
     form.append('config', JSON.stringify(config));
 
-    const createRes = await fetch(`${this.baseUrl}/jobs`, {
-      method: 'POST',
-      headers: this.headers,
-      body: form,
-      signal: AbortSignal.timeout(60_000),
-    });
-    if (!createRes.ok) {
+    // 免費層有並行任務數限制，額滿時 429/403，等待後重試
+    for (let attempt = 0; ; attempt++) {
+      const createRes = await fetch(`${this.baseUrl}/jobs`, {
+        method: 'POST',
+        headers: this.headers,
+        body: form,
+        signal: AbortSignal.timeout(60_000),
+      });
+      if (createRes.ok) {
+        const { id } = await createRes.json();
+        return id;
+      }
       const body = await createRes.text().catch(() => '');
+      if ((createRes.status === 429 || createRes.status === 403) && attempt < 10) {
+        console.warn(`[stt] Speechmatics 送件受限（${createRes.status}），5 秒後重試`);
+        await sleep(5000);
+        continue;
+      }
       throw new Error(`Speechmatics 建立任務失敗 ${createRes.status}: ${body.slice(0, 300)}`);
     }
-    const { id } = await createRes.json();
+  }
 
-    // 2. 輪詢任務狀態（短音訊通常數秒～數十秒完成）
+  async #awaitResult(id) {
+    // 輪詢任務狀態（短音訊通常數秒～數十秒完成）
     const deadline = Date.now() + 5 * 60 * 1000;
     for (;;) {
       await sleep(2000);
