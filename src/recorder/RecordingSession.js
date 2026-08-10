@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import { EndBehaviorType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 import { config } from '../config.js';
@@ -77,9 +79,18 @@ export class RecordingSession {
     const decoder = new OpusScript(48000, 2, OpusScript.Application.AUDIO);
     const chunks = [];
     let badPackets = 0;
+    let lastPacketAt = 0;
     opusStream.on('error', (err) => console.error(`[recorder] opus stream error (${userId}):`, err.message));
     opusStream.on('data', (packet) => {
       if (packet.length <= 3) return;
+      // Discord 靜音時不傳封包：把封包間的真實時間差補回靜音，
+      // 否則語句會黏在一起、節奏錯亂導致辨識劣化
+      const now = Date.now();
+      if (lastPacketAt && now - lastPacketAt > 120) {
+        const gapMs = Math.min(now - lastPacketAt, 1500);
+        chunks.push(Buffer.alloc(Math.round(gapMs) * 192)); // 192 bytes/ms @48k 立體聲 16-bit
+      }
+      lastPacketAt = now;
       try {
         chunks.push(Buffer.from(decoder.decode(packet)));
       } catch {
@@ -99,6 +110,10 @@ export class RecordingSession {
 
       const pcm = Buffer.concat(chunks);
       const durationMs = pcmDurationMs(pcm.length);
+      console.log(
+        `[recorder] 段落擷取 user=${userId} offset=${Math.round(startMs / 1000)}s ` +
+          `時長=${Math.round(durationMs)}ms 封包數=${chunks.length}`,
+      );
       if (durationMs < config.minSegmentMs) return; // 太短，當雜音丟掉
 
       const displayName = await this.resolveDisplayName(userId);
@@ -151,10 +166,22 @@ export class RecordingSession {
     this.segments.push(segment);
 
     const wav = pcmToWav(Buffer.concat(buf.pcms));
+    console.log(
+      `[recorder] 沖洗批次 ${buf.displayName} [${Math.round(buf.startMs / 1000)}s-${Math.round(buf.endMs / 1000)}s] ` +
+        `音訊=${Math.round((wav.length - 44) / 192)}ms`,
+    );
+    if (config.debugSaveAudio) {
+      const dir = path.resolve('recordings');
+      fs.mkdirSync(dir, { recursive: true });
+      const file = path.join(dir, `batch-${Date.now()}-${buf.displayName}.wav`);
+      fs.writeFileSync(file, wav);
+      console.log(`[debug] 批次音訊已存 ${file}`);
+    }
     const job = this.sttProvider
       .transcribe(wav, { language: config.stt.language, prompt: config.stt.prompt })
       .then(({ text }) => {
         segment.text = text;
+        console.log(`[stt] ${buf.displayName}: ${text}`);
       })
       .catch((err) => {
         segment.error = err.message;

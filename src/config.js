@@ -44,6 +44,8 @@ export const config = {
   minSegmentMs: Number(process.env.MIN_SEGMENT_MS || 300),
 
   transcriptDir: process.env.TRANSCRIPT_DIR || 'transcripts',
+  // 除錯：把每批送辨識的音訊存到 recordings/（DEBUG_SAVE_AUDIO=1 開啟）
+  debugSaveAudio: process.env.DEBUG_SAVE_AUDIO === '1',
 };
 
 export function assertConfig() {
