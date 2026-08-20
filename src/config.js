@@ -42,6 +42,8 @@ export const config = {
   maxMergedDurationMs: Number(process.env.MAX_MERGED_DURATION_MS || 120_000),
   // 短於此長度的音訊段落直接丟棄（毫秒），過濾雜音
   minSegmentMs: Number(process.env.MIN_SEGMENT_MS || 300),
+  // 最大視窗 RMS 低於此值的段落視為雜音丟棄（int16 音量刻度，人聲通常 >1000）
+  minSegmentRms: Number(process.env.MIN_SEGMENT_RMS || 300),
 
   transcriptDir: process.env.TRANSCRIPT_DIR || 'transcripts',
   // 除錯：把每批送辨識的音訊存到 recordings/（DEBUG_SAVE_AUDIO=1 開啟）

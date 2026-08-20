@@ -25,6 +25,27 @@ export function pcmToWav(pcmBuffer, { sampleRate = 48000, channels = 2, bitDepth
   return Buffer.concat([header, pcmBuffer]);
 }
 
+/**
+ * 以 100ms 視窗計算 PCM 的最大 RMS 音量（取左聲道抽樣）。
+ * 用最大視窗而非整段平均，避免補回的停頓靜音稀釋數值。
+ */
+export function pcmMaxWindowRms(pcmBuffer) {
+  const windowBytes = 192 * 100; // 100ms @48k 立體聲 16-bit
+  let max = 0;
+  for (let offset = 0; offset < pcmBuffer.length; offset += windowBytes) {
+    const end = Math.min(offset + windowBytes, pcmBuffer.length);
+    let sum = 0;
+    let count = 0;
+    for (let i = offset; i + 1 < end; i += 4) {
+      const v = pcmBuffer.readInt16LE(i);
+      sum += v * v;
+      count++;
+    }
+    if (count) max = Math.max(max, Math.sqrt(sum / count));
+  }
+  return max;
+}
+
 /** PCM 長度換算為毫秒 */
 export function pcmDurationMs(pcmLength, { sampleRate = 48000, channels = 2, bitDepth = 16 } = {}) {
   const byteRate = (sampleRate * channels * bitDepth) / 8;

@@ -3,8 +3,9 @@ import path from 'node:path';
 import { EndBehaviorType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 import { config } from '../config.js';
-import { pcmToWav, pcmDurationMs } from '../utils/wav.js';
+import { pcmToWav, pcmDurationMs, pcmMaxWindowRms } from '../utils/wav.js';
 import { formatFileTimestamp } from '../utils/time.js';
+import { isLikelyHallucination } from '../utils/hallucination.js';
 
 // 合併段落之間插入的靜音（讓 STT 知道是不同句子）
 const JOIN_SILENCE = Buffer.alloc(48000 * 2 * 2 * 0.3); // 0.3 秒
@@ -133,6 +134,13 @@ export class RecordingSession {
       );
       if (durationMs < config.minSegmentMs) return; // 太短，當雜音丟掉
 
+      // 音量閘門：整段都沒有達到人聲音量的視窗（鍵盤聲、呼吸聲）直接丟棄
+      const rms = pcmMaxWindowRms(pcm);
+      if (rms < config.minSegmentRms) {
+        console.log(`[filter] 音量過低（RMS ${Math.round(rms)} < ${config.minSegmentRms}），丟棄 ${Math.round(durationMs)}ms 段落`);
+        return;
+      }
+
       const displayName = await this.resolveDisplayName(userId);
       this.enqueuePcm(userId, displayName, startMs, startMs + Math.round(durationMs), pcm);
     });
@@ -197,6 +205,19 @@ export class RecordingSession {
     const job = this.sttProvider
       .transcribe(wav, { language: config.stt.language, prompt: config.stt.prompt })
       .then(({ text }) => {
+        const durationMs = segment.endMs - segment.startMs;
+        if (isLikelyHallucination(text, durationMs)) {
+          segment.text = ''; // formatter 會略過空字串
+          console.log(`[filter] 疑似幻覺已過濾（${Math.round(durationMs)}ms）: ${text}`);
+          this.appendJournal({
+            start: segment.startMs,
+            end: segment.endMs,
+            speaker: segment.displayName,
+            filtered: 'hallucination',
+            text,
+          });
+          return;
+        }
         segment.text = text;
         console.log(`[stt] ${buf.displayName}: ${text}`);
         this.appendJournal({
