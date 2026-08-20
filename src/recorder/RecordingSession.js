@@ -4,6 +4,7 @@ import { EndBehaviorType } from '@discordjs/voice';
 import OpusScript from 'opusscript';
 import { config } from '../config.js';
 import { pcmToWav, pcmDurationMs } from '../utils/wav.js';
+import { formatFileTimestamp } from '../utils/time.js';
 
 // 合併段落之間插入的靜音（讓 STT 知道是不同句子）
 const JOIN_SILENCE = Buffer.alloc(48000 * 2 * 2 * 0.3); // 0.3 秒
@@ -52,7 +53,23 @@ export class RecordingSession {
 
   start() {
     this.startedAt = new Date();
+    // 流水帳（WAL）：每段辨識完成立刻逐筆落盤，程序中斷也不會遺失已辨識內容
+    const dir = path.resolve(config.transcriptDir);
+    fs.mkdirSync(dir, { recursive: true });
+    this.journalPath = path.join(dir, `session-${formatFileTimestamp(this.startedAt)}.jsonl`);
+    this.appendJournal({
+      type: 'session-start',
+      channel: this.voiceChannel.name,
+      startedAt: this.startedAt.toISOString(),
+    });
     this.receiver.speaking.on('start', this._onSpeakingStart);
+  }
+
+  /** 逐筆附加到 jsonl 流水帳（非同步、不阻塞） */
+  appendJournal(entry) {
+    fs.appendFile(this.journalPath, JSON.stringify(entry) + '\n', (err) => {
+      if (err) console.error('[journal] 寫入失敗:', err.message);
+    });
   }
 
   /** 尚未完成辨識的 batch 數 */
@@ -182,10 +199,22 @@ export class RecordingSession {
       .then(({ text }) => {
         segment.text = text;
         console.log(`[stt] ${buf.displayName}: ${text}`);
+        this.appendJournal({
+          start: segment.startMs,
+          end: segment.endMs,
+          speaker: segment.displayName,
+          text,
+        });
       })
       .catch((err) => {
         segment.error = err.message;
         console.error(`[stt] 辨識失敗 (${segment.displayName}):`, err.message);
+        this.appendJournal({
+          start: segment.startMs,
+          end: segment.endMs,
+          speaker: segment.displayName,
+          error: err.message,
+        });
       })
       .finally(() => {
         this.doneCount++;
