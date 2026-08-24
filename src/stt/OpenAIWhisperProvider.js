@@ -1,5 +1,9 @@
+import * as OpenCC from 'opencc-js';
 import { SttProvider } from './SttProvider.js';
 import { createRateLimiter, sleep } from '../utils/throttle.js';
+
+// Whisper 中文常輸出簡體，統一轉台灣繁體（含慣用語）
+const toTraditional = OpenCC.Converter({ from: 'cn', to: 'twp' });
 
 const MAX_RETRIES = 3;
 
@@ -56,7 +60,9 @@ export class OpenAIWhisperProvider extends SttProvider {
 
       if (res.ok) {
         const data = await res.json();
-        return { text: (data.text || '').trim() };
+        let text = (data.text || '').trim();
+        if (!language || language.startsWith('zh')) text = toTraditional(text);
+        return { text };
       }
 
       const body = await res.text().catch(() => '');
