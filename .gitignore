@@ -4,3 +4,4 @@ transcripts/
 recordings/
 *.log
 .DS_Store
+local-asr/venv/
