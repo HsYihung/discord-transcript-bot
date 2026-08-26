@@ -83,7 +83,6 @@ asr-server 常駐約 4GB RAM；改用 0.6B 模型（`ASR_MODEL=Qwen/Qwen3-ASR-0.
 
 - `openai-whisper` — 任何 OpenAI 相容端點。預設指向**本地 Qwen3-ASR server**；改 `OPENAI_BASE_URL` 即可接 Groq（免費層跑 whisper-large-v3，設 `STT_MIN_INTERVAL_MS=3200` 避開 20 RPM 限速）或 OpenAI 官方
 - `speechmatics` — Speechmatics Batch API（免費 480 分/月），`cmn_en` 中英雙語 pack，輸出自動轉繁
-- `typeless` — Typeless External Transcript API（其開發者平台尚未公開，程式已就緒待其開放）
 - `dummy` — 不呼叫 API，只回報音訊長度，測試錄音流程用
 
 ### 新增自己的 provider

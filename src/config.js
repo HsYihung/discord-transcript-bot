@@ -15,11 +15,6 @@ export const config = {
       baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
       model: process.env.OPENAI_STT_MODEL || 'whisper-1',
     },
-    typeless: {
-      apiKey: process.env.TYPELESS_API_KEY,
-      baseUrl: process.env.TYPELESS_BASE_URL || 'https://api.typelessapi.com',
-      model: process.env.TYPELESS_MODEL || 'typeless-1.0-pro',
-    },
     speechmatics: {
       apiKey: process.env.SPEECHMATICS_API_KEY,
       region: process.env.SPEECHMATICS_REGION || 'eu1',
