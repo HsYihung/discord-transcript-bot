@@ -34,6 +34,13 @@ def _load():
 
 def _transcribe(path: str, language: str | None):
     result = session.transcribe(path, language=LANGUAGE_MAP.get(language, None))
+    # MLX 快取會隨請求累積（實測 5.8GB → 8.3GB），每次辨識後釋放
+    try:
+        import mlx.core as mx
+
+        mx.clear_cache()
+    except Exception:
+        pass
     return result.text
 
 
